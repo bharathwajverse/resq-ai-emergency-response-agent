@@ -284,21 +284,26 @@ GEMINI_API_KEY=your_key_here
 |--------|----------|-------------|
 | `GET` | `/api/incidents` | List all incidents |
 | `POST` | `/api/incidents` | Create new incident |
-| `GET` | `/api/resources` | Get all resources |
-| `GET` | `/api/ambulances` | List ambulances |
-| `GET` | `/api/hospitals` | List hospitals |
-| `GET` | `/api/roads` | Get road network |
-| `POST` | `/api/agent/analyze` | Run AI agent analysis |
-| `POST` | `/api/agent/plan` | Generate response plan |
-| `POST` | `/api/agent/replan` | Trigger replanning |
-| `POST` | `/api/search/run` | Execute search algorithm |
-| `POST` | `/api/inference/forward` | Run forward chaining |
-| `POST` | `/api/inference/backward` | Run backward chaining |
-| `POST` | `/api/csp/solve` | Solve CSP allocation |
-| `POST` | `/api/risk/analyze` | Bayesian risk analysis |
-| `POST` | `/api/planning/generate` | Generate plan |
-| `POST` | `/api/learning/predict` | Decision tree prediction |
-| `GET` | `/api/decisions` | Decision history |
+| `GET` | `/api/incidents/{id}` | Retrieve single incident details |
+| `GET` | `/api/resources` | Get all emergency resources |
+| `GET` | `/api/ambulances` | List ambulances and status/capacity |
+| `GET` | `/api/hospitals` | List hospitals and bed capacity |
+| `GET` | `/api/roads` | Get road network edges |
+| `GET` | `/api/graph` | Get 13-node spatial coordinates & 17 road edges |
+| `GET` | `/api/knowledge` | Get canonical Frames, Ontology tree & Knowledge Graph |
+| `POST` | `/api/agent/analyze` | Run AI agent NLU + inference + risk analysis |
+| `POST` | `/api/agent/plan` | Execute full 11-stage agent response plan |
+| `POST` | `/api/agent/replan` | Trigger dynamic replanning when a unit fails |
+| `POST` | `/api/search/run` | Execute search algorithm (UCS, DLS, IDS, A*, Best First, Hill Climbing, Beam) |
+| `POST` | `/api/inference/forward` | Run forward chaining over Horn rules |
+| `POST` | `/api/inference/backward` | Run backward chaining goal proof |
+| `POST` | `/api/csp/solve` | Solve CSP allocation with MRV, LCV & AC-3 |
+| `POST` | `/api/risk/analyze` | Evaluate 7-variable Bayesian CPT risk network |
+| `POST` | `/api/planning/generate` | Generate HTN, State-Space STRIPS, or POP plan |
+| `POST` | `/api/learning/predict` | Decision tree priority prediction + entropy/IG |
+| `GET` | `/api/learning/tree` | Export learned Decision Tree structure |
+| `POST` | `/api/lab/run` | Execute any of the 22 FAI syllabus algorithms in the Lab |
+| `GET` | `/api/decisions` | Audit log of agent dispatch decisions |
 
 > See [API.md](docs/API.md) for full documentation.
 
@@ -307,8 +312,8 @@ GEMINI_API_KEY=your_key_here
 ## 🧪 Testing
 
 ```bash
-# Run all tests
-python scripts/run_all_tests.py
+# Run full 242-test suite (unit + integration + E2E)
+python -m pytest backend/tests/ tests/e2e/test_e2e_workflows.py -v
 
 # Run backend unit tests
 cd backend
@@ -317,20 +322,21 @@ pytest tests/unit/ -v
 # Run integration tests
 pytest tests/integration/ -v
 
-# Run E2E tests
-pytest tests/e2e/ -v
+# Run E2E tests (5 canonical emergency scenarios + replanning)
+pytest ../tests/e2e/ -v
 ```
 
-### Test Coverage
+### Test Coverage (242 Automated Tests Passing)
 
 - ✅ Search algorithms (UCS, A*, DLS, IDS, Best First, Hill Climbing, Beam Search)
-- ✅ CSP solver with backtracking
-- ✅ Forward & backward chaining inference
-- ✅ Bayesian risk engine
-- ✅ Decision tree learning
-- ✅ Agent orchestration
-- ✅ API integration tests
-- ✅ 5 demo scenario E2E tests
+- ✅ CSP solver with backtracking, MRV, LCV, AC-3, MCTS & Alpha-Beta pruning
+- ✅ Forward chaining, backward chaining & CNF resolution inference
+- ✅ Knowledge Base, Semantic Frames & 53-concept Ontology
+- ✅ State-Space (STRIPS), Partial-Order (POP) & Hierarchical (HTN) planning
+- ✅ Bayesian CPT risk engine (simulated/educational probabilities)
+- ✅ Decision tree learning (`scikit-learn` entropy & information gain)
+- ✅ 11-stage Agent orchestration & dynamic replanning
+- ✅ REST API integration & 5 demo scenario E2E tests
 
 ---
 
