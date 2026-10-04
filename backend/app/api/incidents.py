@@ -10,8 +10,43 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 router = APIRouter()
 
-# In-memory store synchronized across requests
-INCIDENT_STORE: Dict[str, Dict[str, Any]] = {}
+# Pre-seeded realistic incidents so Dashboard and IncidentDetails have live backend records immediately
+INCIDENT_STORE: Dict[str, Dict[str, Any]] = {
+    "INC-101": {
+        "id": "INC-101",
+        "title": "University Highway Multi-Vehicle Pileup",
+        "emergency_type": "Road Accident",
+        "type": "Road Accident",
+        "description": "Multi-car crash near Downtown Junction N1, 6 victims injured, heavy rain, main bridge N1-N2 blocked.",
+        "location": "N1",
+        "victim_count": 6,
+        "victims": 6,
+        "weather": "Heavy Rain",
+        "road_condition": "Blocked",
+        "severity": "Critical",
+        "priority": "Critical",
+        "status": "Active",
+        "plan": "Dispatched Ambulance A2 (cap 6) via detour A2 -> N4 -> N1 -> N3 -> H1 (City General Trauma Center).",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    },
+    "INC-102": {
+        "id": "INC-102",
+        "title": "Midtown Commercial Warehouse Fire",
+        "emergency_type": "Fire",
+        "type": "Fire",
+        "description": "Industrial warehouse fire at N4 Midtown with 4 victims requiring burn treatment, clear weather.",
+        "location": "N4",
+        "victim_count": 4,
+        "victims": 4,
+        "weather": "Clear",
+        "road_condition": "Clear",
+        "severity": "High",
+        "priority": "High",
+        "status": "Active",
+        "plan": "Dispatched Ambulance A1 (cap 4) to N4 -> H1 Burn Unit via optimal A* route.",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    },
+}
 
 
 class IncidentCreateRequest(BaseModel):
@@ -66,6 +101,7 @@ def create_incident(data: IncidentCreateRequest) -> Dict[str, Any]:
         "severity": data.severity,
         "priority": priority,
         "status": data.status or "Active",
+        "plan": f"Pending AI Agent dispatch for {vc} victims at {data.location}.",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     INCIDENT_STORE[inc_id] = incident

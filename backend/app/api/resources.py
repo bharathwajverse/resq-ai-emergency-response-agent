@@ -1,11 +1,13 @@
 """
-ResQ-AI Core Emergency Resources & Seed API Router.
+ResQ-AI Core Emergency Resources, Road Graph & Knowledge Base API Router.
 Provides endpoints for:
 - POST /api/seed
 - GET /api/resources
 - GET /api/ambulances
 - GET /api/hospitals
 - GET /api/roads
+- GET /api/graph
+- GET /api/knowledge
 """
 
 from typing import Any, Dict, List
@@ -13,6 +15,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.knowledge.frames import create_canonical_frames
+from app.knowledge.graph_export import KnowledgeGraphExporter
+from app.knowledge.ontology import default_ontology, ontology_tree
+from app.knowledge.relationships import RESOURCE_REQUIREMENTS, relationships
 from app.models.ambulance import Ambulance
 from app.models.hospital import Hospital
 from app.models.road import Road
@@ -72,9 +78,9 @@ def list_ambulances(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
         pass
 
     return [
-        {"id": "amb-1", "code": "A1", "callsign": "A1", "capacity": 4, "status": "Available", "location": "A1"},
-        {"id": "amb-2", "code": "A2", "callsign": "A2", "capacity": 6, "status": "Available", "location": "A2"},
-        {"id": "amb-3", "code": "A3", "callsign": "A3", "capacity": 6, "status": "Maintenance", "location": "A3"},
+        {"id": "amb-1", "code": "A1", "callsign": "Alpha-1 (ALS)", "capacity": 4, "status": "Available", "location": "A1", "equipment": "ALS"},
+        {"id": "amb-2", "code": "A2", "callsign": "Alpha-2 (ALS)", "capacity": 6, "status": "Available", "location": "A2", "equipment": "ALS"},
+        {"id": "amb-3", "code": "A3", "callsign": "Bravo-3 (BLS)", "capacity": 6, "status": "Maintenance", "location": "A3", "equipment": "BLS"},
     ]
 
 
@@ -107,6 +113,7 @@ def list_hospitals(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
             "location": "H1",
             "emergency_capacity": 20,
             "available_beds": 15,
+            "specialties": ["Trauma", "Cardiology", "BurnUnit", "ICU", "Neurology"],
         },
         {
             "id": "hosp-2",
@@ -115,6 +122,7 @@ def list_hospitals(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
             "location": "H2",
             "emergency_capacity": 8,
             "available_beds": 8,
+            "specialties": ["General", "Orthopedics", "Pediatrics"],
         },
     ]
 
@@ -157,10 +165,60 @@ def list_roads(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
                         "target_node": edge.target,
                         "distance": edge.distance,
                         "distance_km": edge.distance,
-                        "travel_time": edge.travel_time_minutes(),
+                        "travel_time": round(edge.travel_time_minutes(), 2),
                         "traffic_factor": edge.traffic_factor,
                         "is_blocked": edge.is_blocked,
                         "risk_factor": edge.risk_factor,
                     }
                 )
     return edges
+
+
+@router.get("/graph")
+def get_road_graph_topology() -> Dict[str, Any]:
+    """Returns the complete 13-node spatial RoadGraph with node coordinates and attributed edges."""
+    graph = RoadGraph.build_canonical_network()
+    nodes_list = [n.to_dict() for n in graph.nodes.values()]
+    edges_list: List[Dict[str, Any]] = []
+    seen = set()
+    for u, nbrs in graph.adjacency.items():
+        edge_iter = nbrs.values() if isinstance(nbrs, dict) else nbrs
+        for edge in edge_iter:
+            pair = tuple(sorted([edge.source, edge.target]))
+            if pair not in seen:
+                seen.add(pair)
+                edges_list.append(edge.to_dict())
+    return {
+        "nodes": nodes_list,
+        "edges": edges_list,
+    }
+
+
+@router.get("/knowledge")
+def get_knowledge_representation() -> Dict[str, Any]:
+    """
+    Returns Module VI Knowledge Representation structures:
+    - Canonical Frames (Incident, Ambulance, Hospital, Road, Resource)
+    - Ontology Taxonomy Tree (Emergency & Resource hierarchies)
+    - Entity Relationships & Resource Requirements
+    - Multi-layer Knowledge Graph (nodes & edges)
+    """
+    frames_raw = create_canonical_frames()
+    frames = list(frames_raw.values()) if isinstance(frames_raw, dict) else list(frames_raw)
+    exporter = KnowledgeGraphExporter(frames=frames, ontology=default_ontology)
+    kg = exporter.export_combined_graph()
+
+    return {
+        "frames": [
+            {
+                "name": f.name,
+                "category": f.category,
+                "slots": f.to_dict(),
+            }
+            for f in frames
+        ],
+        "ontology_tree": ontology_tree,
+        "relationships": relationships,
+        "resource_requirements": RESOURCE_REQUIREMENTS,
+        "graph": kg.model_dump(),
+    }
