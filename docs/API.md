@@ -1,57 +1,169 @@
-# API Documentation
+# ResQ-AI REST API Reference
 
-## Incidents
-- `GET /api/incidents`: List all incidents
-  - **Response**: `[{"id": "...", "title": "Fire", "severity": "high", "status": "active"}]`
-- `POST /api/incidents`: Create a new incident
-  - **Request Body**: `{"title": "Accident", "description": "Car crash", "severity": "high"}`
-  - **Response**: `{"id": "...", "status": "created"}`
-- `GET /api/incidents/{id}`: Get incident details
-  - **Response**: `{"id": "...", "title": "Accident", "description": "Car crash", ...}`
+Base URL: `http://localhost:8000`  
+Interactive Swagger UI: `http://localhost:8000/docs`  
+ReDoc Reference: `http://localhost:8000/redoc`
 
-## Resources
-- `GET /api/resources`: List resources
-  - **Response**: `[{"id": "...", "name": "Defibrillator 1", "type": "Medical Equipment", "status": "available"}]`
-- `GET /api/ambulances`: List ambulances
-  - **Response**: `[{"id": "...", "name": "A1", "status": "available", "capacity": 4}]`
-- `GET /api/hospitals`: List hospitals
-  - **Response**: `[{"id": "...", "name": "H1", "emergency_capacity": 20}]`
+> **Academic Disclaimer Header**: All HTTP responses include `X-ResQ-AI-Disclaimer: Educational simulation - not for real-world emergency dispatch.` and `X-Response-Time-Ms`.
 
-## Agent
-- `POST /api/agent/query`: Send natural language query to the AI agent
-  - **Request Body**: `{"query": "Allocate an ambulance to the fire"}`
-  - **Response**: `{"response": "Agent decided to allocate A1", "decisions": [...]}`
+---
 
-## Search
-- `POST /api/search/route`: Find a route using specified algorithm
-  - **Request Body**: `{"algorithm": "astar", "source": "H1", "destination": "H2"}`
-  - **Response**: `{"path": ["H1", "N1", "N2", "H2"], "cost": 12.0}`
+## 1. System & Seed Endpoints
 
-## Inference
-- `POST /api/inference/query`: Run logical inference
-  - **Request Body**: `{"facts": ["fire_present"], "query": "severity_high"}`
-  - **Response**: `{"result": true, "proof": "..."}`
+### `GET /health`
+Verifies API status and live database connectivity (`SELECT 1`).
+- **Response (`200 OK`)**:
+```json
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "database": "connected",
+  "demo_mode": true,
+  "disclaimer": "Educational simulation — not for real-world emergency dispatch."
+}
+```
 
-## CSP
-- `POST /api/csp/solve`: Allocate resources
-  - **Request Body**: `{"incidents": [...], "resources": [...]}`
-  - **Response**: `{"allocation": {"incident_1": "ambulance_A1"}}`
+### `POST /api/seed`
+Idempotently seeds canonical hospitals (`H1`, `H2`), ambulances (`A1`, `A2`, `A3`), resources, and the 13-node road network graph.
 
-## Risk
-- `POST /api/risk/calculate`: Calculate Bayesian risk
-  - **Request Body**: `{"weather": "rain", "road_type": "highway"}`
-  - **Response**: `{"risk_factor": 0.45}`
+---
 
-## Planning
-- `POST /api/planning/generate`: Generate response plan
-  - **Request Body**: `{"incident_type": "earthquake", "severity": "critical"}`
-  - **Response**: `{"plan": ["Triage", "Dispatch Medics", "Evacuate"]}`
+## 2. Incidents (`backend/app/api/incidents.py`)
 
-## Learning
-- `POST /api/learning/predict`: Predict incident priority
-  - **Request Body**: `{"description": "Massive fire with multiple injuries"}`
-  - **Response**: `{"priority": "critical", "confidence": 0.89}`
+### `GET /api/incidents`
+Returns all active/reported emergency incidents.
 
-## Algorithms Lab
-- `GET /api/lab/status`: Get health and availability of lab modules
-  - **Response**: `{"status": "online", "modules": ["search", "csp", "learning"]}`
+### `POST /api/incidents`
+Creates a new validated emergency incident.
+- **Request Body**:
+```json
+{
+  "title": "Scenario 1: Highway Crash",
+  "emergency_type": "Traffic Accident",
+  "description": "Multi-car crash near Downtown Junction N1, 6 victims, heavy rain, bridge N1-N2 blocked.",
+  "location": "N1",
+  "victim_count": 6,
+  "severity": "High",
+  "weather": "Heavy Rain",
+  "road_condition": "Blocked"
+}
+```
+- **Response (`201 Created`)**: Returns created incident with UUID `id`, `priority`, and `created_at`.
+
+### `GET /api/incidents/{incident_id}`
+Retrieves a single incident by UUID or returns `404 Not Found`.
+
+---
+
+## 3. Emergency Resources (`backend/app/api/resources.py`)
+
+- `GET /api/resources`: Returns combined `{ "ambulances": [...], "hospitals": [...], "roads": [...] }`.
+- `GET /api/ambulances`: Returns fleet (`A1` cap 4 Available, `A2` cap 6 Available, `A3` cap 6 Maintenance).
+- `GET /api/hospitals`: Returns hospitals (`H1` emergency capacity 20, `H2` emergency capacity 8).
+- `GET /api/roads`: Returns 13-node road graph edges (`source_node`, `target_node`, `distance_km`, `travel_time`, `traffic_factor`, `is_blocked`, `risk_factor`).
+
+---
+
+## 4. AI Agent Orchestrator (`backend/app/api/agent.py`)
+
+### `POST /api/agent/analyze`
+Parses natural language emergency text (via Gemini API or deterministic Demo Parser) and runs the stage-by-stage reasoning pipeline.
+- **Request Body**:
+```json
+{
+  "text": "Severe highway pileup at N1 Downtown with 6 injured passengers. Torrential rain and road N1-N2 blocked."
+}
+```
+- **Response (`200 OK`)**: Returns `extracted`, `inferences`, `risk`, `allocation`, `routes`, `plan`, `stages`, and `explanation`.
+
+### `POST /api/agent/plan`
+Executes the full 11-stage autonomous agent workflow for an incident and records the decision in the audit trail.
+- **Request Body**: `{"incident_id": "<uuid>"}`
+- **Response (`200 OK`)**: Returns `priority`, `allocated_ambulance`, `allocated_hospital`, `route`, `risk`, `plan`, and `explanation`.
+
+### `POST /api/agent/replan`
+Triggers dynamic replanning when a dispatched ambulance becomes unavailable or a road is blocked mid-mission.
+- **Request Body**:
+```json
+{
+  "incident_id": "<uuid>",
+  "failed_ambulance_code": "A2",
+  "reason": "Tire blowout on highway"
+}
+```
+- **Response (`200 OK`)**: Returns `is_replanned: true`, alternate `allocated_ambulance`, updated detour `route`, and `new_plan`.
+
+---
+
+## 5. Uninformed & Informed Route Search (`backend/app/api/search.py`)
+
+### `POST /api/search/run`
+Executes any of the 7 search algorithms (`UCS`, `DLS`, `IDS`, `A_Star`, `Best_First`, `Hill_Climbing`, `Beam_Search`) on the 13-node road graph.
+- **Request Body**:
+```json
+{
+  "algorithm": "A_Star",
+  "start_node": "A2",
+  "goal_node": "H1",
+  "depth_limit": 8,
+  "beam_width": 3
+}
+```
+- **Response (`200 OK`)**:
+```json
+{
+  "success": true,
+  "algorithm_name": "A* Search",
+  "path": ["A2", "N4", "N1", "N3", "H1"],
+  "cost": 18.4,
+  "nodes_explored": 5,
+  "blocked": 1
+}
+```
+
+---
+
+## 6. CSP Resource Allocation (`backend/app/api/csp.py`)
+
+### `POST /api/csp/solve`
+Runs Backtracking search with MRV, LCV, Forward Checking, and AC-3 constraint propagation.
+- **Request Body**: `{"victim_count": 6, "location": "N1", "severity": "High"}`
+- **Response (`200 OK`)**: Returns `success`, `assignment` (`ambulance`, `hospital`), `nodes_explored`, `backtracks`, and `rejected_candidates` with rejection reasons.
+
+---
+
+## 7. Logical Inference (`backend/app/api/inference.py`)
+
+- `POST /api/inference/forward`: Fixpoint Forward Chaining over Horn rules (`{"facts": ["victim_count_gte_5", "severity_high"]}`).
+- `POST /api/inference/backward`: Goal-driven recursive Backward Chaining proof tree (`{"goal": "priority_p1_critical", "known_facts": [...]}`).
+- `POST /api/inference/resolution`: Propositional CNF Resolution Refutation (`{"clauses": [["P", "Q"], ["-P", "Q"], ["-Q"]]}`).
+
+---
+
+## 8. Classical & Hierarchical Planning (`backend/app/api/planning.py`)
+
+### `POST /api/planning/generate`
+Generates emergency response plans across `Hierarchical` (HTN), `State-Space` (STRIPS BFS/Heuristic), and `Partial-Order` (POP with causal links) paradigms.
+- **Request Body**: `{"paradigm": "Hierarchical", "emergency_type": "Traffic Accident", "victim_count": 6, "location": "N1"}`
+
+---
+
+## 9. Bayesian Risk Engine (`backend/app/api/risk.py`)
+
+### `POST /api/risk/analyze`
+Computes conditional probabilities `P(delay | weather, road)`, `P(high_severity | victims)`, `P(hospital_overload | incidents)`, composite risk score, and simulated disclaimer.
+- **Request Body**: `{"weather": "Heavy Rain", "road_condition": "Flooded", "severity": "Critical", "victim_count": 10}`
+
+---
+
+## 10. Decision Tree Learning Agent (`backend/app/api/learning.py`)
+
+- `POST /api/learning/predict`: Predicts incident priority from emergency features and returns Shannon entropy, information gain, and feature importances.
+- `GET /api/learning/tree`: Exports the trained Decision Tree topology and split thresholds.
+
+---
+
+## 11. Interactive AI Algorithms Lab & Audit History
+
+- `POST /api/lab/run`: Executes any of the 13 FAI algorithms (`UCS`, `DLS`, `IDS`, `A*`, `Best First`, `Hill Climbing`, `Beam Search`, `CSP`, `Backtracking`, `MCTS`, `Alpha-Beta`, `Forward Chaining`, `Backward Chaining`) and returns live output, path/solution, cost, nodes explored, and complexity analysis.
+- `GET /api/decisions`: Returns the audit log of all AI-driven dispatch decisions.

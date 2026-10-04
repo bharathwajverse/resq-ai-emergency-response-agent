@@ -9,6 +9,10 @@ export default function RiskAnalysis() {
     const fetchData = async () => {
       try {
         const res = await analyzeRisk({});
+        if (res.data && Array.isArray(res.data.factors)) {
+          setRiskFactors(res.data.factors);
+          return;
+        }
         if (res.data && Array.isArray(res.data)) {
           setRiskFactors(res.data);
           return;

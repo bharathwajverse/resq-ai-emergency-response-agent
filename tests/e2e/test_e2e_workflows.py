@@ -33,10 +33,10 @@ def api_client() -> Generator[httpx.Client, None, None]:
     1. A live server at BASE_URL (if responsive), OR
     2. An in-process FastAPI application via httpx.ASGITransport.
     """
-    # 1. Check if live server is reachable
+    # 1. Check if live server is reachable and has API router mounted
     try:
-        r = httpx.get(f"{BASE_URL}/docs", timeout=1.0)
-        if r.status_code in (200, 307, 404):
+        r = httpx.get(f"{BASE_URL}/api/ambulances", timeout=1.0)
+        if r.status_code == 200:
             client = httpx.Client(base_url=BASE_URL, timeout=30.0)
             yield client
             client.close()
@@ -63,10 +63,9 @@ def api_client() -> Generator[httpx.Client, None, None]:
             pass
 
     if app is not None:
-        transport = httpx.ASGITransport(app=app)
-        client = httpx.Client(transport=transport, base_url="http://testserver", timeout=30.0)
-        yield client
-        client.close()
+        from fastapi.testclient import TestClient
+        with TestClient(app) as client:
+            yield client
         return
 
     pytest.skip(
