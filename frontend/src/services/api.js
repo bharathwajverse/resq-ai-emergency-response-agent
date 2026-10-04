@@ -1,7 +1,20 @@
 import axios from 'axios';
 
+// Detect whether we are running in local development or deployed to cloud (e.g. Vercel)
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+   window.location.hostname === '127.0.0.1');
+
+// Deployed Render backend URL
+const CLOUD_BACKEND_URL = 'https://resq-ai-backend-dtg6.onrender.com';
+
+// If VITE_API_URL is configured use it; otherwise auto-route to localhost or Render
+const defaultBaseUrl = isLocalhost ? 'http://localhost:8000' : CLOUD_BACKEND_URL;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL || defaultBaseUrl,
+  timeout: 45000,
 });
 
 export const getIncidents = () => api.get('/api/incidents');

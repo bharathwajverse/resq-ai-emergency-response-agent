@@ -4,19 +4,30 @@ import { Menu, Activity, PlusCircle, FlaskConical } from 'lucide-react';
 import { checkHealth } from '../services/api';
 
 export default function Header({ onToggleSidebar = () => {} }) {
-  const [backendOnline, setBackendOnline] = useState(true);
+  const [backendStatus, setBackendStatus] = useState('checking');
 
   useEffect(() => {
     let mounted = true;
-    checkHealth()
-      .then(() => {
-        if (mounted) setBackendOnline(true);
-      })
-      .catch(() => {
-        if (mounted) setBackendOnline(false);
-      });
+    let timer = null;
+
+    const probe = () => {
+      checkHealth()
+        .then(() => {
+          if (mounted) setBackendStatus('online');
+        })
+        .catch(() => {
+          if (mounted) {
+            setBackendStatus('reconnecting');
+            timer = setTimeout(probe, 5000);
+          }
+        });
+    };
+
+    probe();
+
     return () => {
       mounted = false;
+      if (timer) clearTimeout(timer);
     };
   }, []);
 
@@ -46,13 +57,19 @@ export default function Header({ onToggleSidebar = () => {} }) {
       <div className="flex items-center gap-3">
         <span
           className={`hidden sm:inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-mono ${
-            backendOnline
+            backendStatus === 'online'
               ? 'bg-emerald-950/60 border-emerald-700/60 text-emerald-300'
+              : backendStatus === 'checking'
+              ? 'bg-blue-950/60 border-blue-700/60 text-blue-300'
               : 'bg-amber-950/60 border-amber-700/60 text-amber-300'
           }`}
         >
           <Activity className="w-3.5 h-3.5" />
-          {backendOnline ? 'Engine Online (Demo NLU Ready)' : 'Offline Simulation Fallback'}
+          {backendStatus === 'online'
+            ? 'Engine Online (Render + Neon)'
+            : backendStatus === 'checking'
+            ? 'Connecting...'
+            : 'Engine Waking Up / Connecting...'}
         </span>
 
         <Link
