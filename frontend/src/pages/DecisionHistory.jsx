@@ -34,16 +34,24 @@ export default function DecisionHistory() {
 
   const filtered = decisions.filter((d) => {
     const pStr = String(d.priority || '').toUpperCase();
+    const pf = priorityFilter.toUpperCase();
     const matchesPriority =
-      priorityFilter === 'ALL' ||
-      pStr === priorityFilter ||
-      pStr.includes(priorityFilter);
+      pf === 'ALL' ||
+      pStr === pf ||
+      pStr.includes(pf) ||
+      pf.includes(pStr) ||
+      (pf === 'MEDIUM' && (pStr.includes('MED') || pStr.includes('MODERATE'))) ||
+      (pf === 'CRITICAL' && (pStr.includes('CRIT') || pStr.includes('P1'))) ||
+      (pf === 'HIGH' && (pStr.includes('HIGH') || pStr.includes('P2'))) ||
+      (pf === 'LOW' && (pStr.includes('LOW') || pStr.includes('NORM')));
     const q = query.trim().toLowerCase();
     const matchesQuery =
       !q ||
       String(d.incident || '').toLowerCase().includes(q) ||
       String(d.ambulance || '').toLowerCase().includes(q) ||
       String(d.hospital || '').toLowerCase().includes(q) ||
+      String(d.route || '').toLowerCase().includes(q) ||
+      String(d.risk || '').toLowerCase().includes(q) ||
       String(d.reason || '').toLowerCase().includes(q);
     return matchesPriority && matchesQuery;
   });

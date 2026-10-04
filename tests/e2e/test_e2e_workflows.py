@@ -31,16 +31,6 @@ def _ensure_fresh_server():
     workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
     backend_path = os.path.join(workspace_root, "backend")
 
-    for f in [
-        os.path.join(workspace_root, "tests", "verify_browser_all.py"),
-        os.path.join(workspace_root, "tests", "e2e", "test_browser_qa.py"),
-    ]:
-        if os.path.exists(f):
-            try:
-                os.remove(f)
-            except Exception:
-                pass
-
     needs_restart = False
     try:
         r = httpx.get("http://127.0.0.1:8000/api/ambulances", timeout=1.0)
@@ -877,6 +867,36 @@ class TestDynamicReplanningAndDecisions:
         assert "Dynamic Replan" in latest.get("incident", "")
         assert latest.get("priority") == "Critical"
         assert latest.get("id") > max([d.get("id", 0) for d in pre_decisions if isinstance(d.get("id"), int)] or [0])
+
+    def test_dynamic_replan_composite_and_suffix_codes(self, api_client: httpx.Client):
+        """Verifies replan cleanly strips suffixes like '(split-dispatch)' and switches units."""
+        resp = api_client.post("/api/agent/replan", json={
+            "incident_id": "INC-101",
+            "failed_ambulance_code": "A1 (split-dispatch)",
+            "reason": "Secondary mechanical fault",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("is_replanned") is True
+        alt = data.get("allocated_ambulance", {})
+        code = alt.get("code") or alt.get("callsign") or ""
+        assert "A2" in code, f"Expected A2 when A1 failed, got {code}"
+
+    def test_dynamic_replan_null_and_string_telemetry(self, api_client: httpx.Client):
+        """Verifies replan handles None and string victim counts gracefully without 500 error."""
+        resp1 = api_client.post("/api/agent/replan", json={
+            "incident_id": "INC-NULL-TEST",
+            "victim_count": None,
+            "failed_ambulance_code": "A2",
+        })
+        assert resp1.status_code == 200
+
+        resp2 = api_client.post("/api/agent/replan", json={
+            "incident_id": "INC-STR-TEST",
+            "victim_count": "5",
+            "failed_ambulance_code": "A1",
+        })
+        assert resp2.status_code == 200
 
 
 class TestBrowserQA:

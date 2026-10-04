@@ -359,7 +359,6 @@ class Orchestrator:
         )
 
         decision_record = {
-            "id": len(INCIDENT_STORE) + 1,
             "incident_id": inc_id,
             "incident": inc_data.get("title") or f"{em_type} at {loc}",
             "priority": priority_label,
@@ -413,25 +412,48 @@ class Orchestrator:
             }
 
         inc_id = payload.get("incident_id", "INC-1")
-        failed_amb = str(
+        failed_raw = str(
             payload.get("failed_ambulance_code")
             or payload.get("unavailable_ambulance")
             or "A2"
-        ).upper()
+        ).upper().strip()
+        failed_clean = failed_raw.split()[0].split("+")[0].strip()
+        failed_amb = failed_clean if failed_clean in ("A1", "A2", "A3") else failed_raw
         reason = payload.get("reason", "Unit unavailable")
 
-        inc_data = INCIDENT_STORE.get(inc_id) or {
-            "location": payload.get("location", "N1"),
-            "victim_count": int(payload.get("victim_count", 6)),
-            "emergency_type": payload.get("emergency_type", "Road accident"),
-            "weather": payload.get("weather", "Clear"),
-        }
-        loc = str(inc_data.get("location", "N1"))
+        # Robust extraction of victim count from payload or store
+        raw_vc = payload.get("victim_count") if payload.get("victim_count") is not None else payload.get("victims")
+        try:
+            payload_vc = int(raw_vc) if raw_vc is not None else None
+        except (ValueError, TypeError):
+            payload_vc = None
+
+        raw_store_data = INCIDENT_STORE.get(inc_id)
+        if raw_store_data:
+            inc_data = dict(raw_store_data)
+            if payload_vc is not None:
+                inc_data["victim_count"] = payload_vc
+            if payload.get("location"):
+                inc_data["location"] = payload.get("location")
+            if payload.get("weather"):
+                inc_data["weather"] = payload.get("weather")
+            if payload.get("emergency_type"):
+                inc_data["emergency_type"] = payload.get("emergency_type")
+        else:
+            inc_data = {
+                "location": payload.get("location") or "N1",
+                "victim_count": payload_vc if payload_vc is not None else 6,
+                "emergency_type": payload.get("emergency_type") or payload.get("type") or "Road accident",
+                "weather": payload.get("weather") or "Clear",
+                "road_condition": payload.get("road_condition") or "Blocked",
+            }
+
+        loc = str(inc_data.get("location", "N1") or "N1")
         if loc not in self.graph.nodes:
             loc = "N1"
 
-        # Select alternate unit excluding failed_amb
-        alt_code = "A1" if failed_amb != "A1" else "A2"
+        # Select alternate unit excluding failed unit (handles composite codes like 'A1 (split-dispatch)' or 'A1+A2')
+        alt_code = "A2" if "A1" in failed_clean else "A1"
         alt_amb = {
             "code": f"{alt_code} (split-dispatch)",
             "callsign": alt_code,
@@ -441,31 +463,45 @@ class Orchestrator:
         }
         hosp_obj = {"code": "H1", "name": "City General Hospital", "emergency_capacity": 20, "location": "H1"}
 
+        # Configure blockage graph
+        road_cond = str(inc_data.get("road_condition") or payload.get("road_condition") or "Blocked")
+        vc_int = int(inc_data.get("victim_count") or 6)
         graph = RoadGraph.build_canonical_network()
-        graph.set_blocked("N1", "N2", True)
+        if "block" in road_cond.lower() or "flood" in road_cond.lower() or loc in ("N1", "N2"):
+            graph.set_blocked("N1", "N2", True)
+        if "flood" in road_cond.lower() or vc_int >= 10:
+            graph.set_blocked("N2", "N5", True)
+
         leg1 = self.search_engine.search(graph, alt_code, loc)
         leg2 = self.search_engine.search(graph, loc, "H1")
         new_path = (leg1.path + leg2.path[1:]) if (leg1.success and leg2.success) else [alt_code, "N3", loc, "H1"]
+        route_cost = round((leg1.cost if leg1.success else 0.0) + (leg2.cost if leg2.success else 0.0), 2)
 
         htn_res = self.planner.plan_emergency(
-            emergency_type=str(inc_data.get("emergency_type", "Road accident")),
+            emergency_type=str(inc_data.get("emergency_type") or inc_data.get("type") or "Road accident"),
             incident_id=str(inc_id),
             ambulance=alt_code,
             hospital="H1",
             location=loc,
-            victims=int(inc_data.get("victim_count", 6)),
+            victims=vc_int,
         )
 
         replan_record = {
             "incident_id": inc_id,
-            "incident": f"{inc_data.get('title') or inc_data.get('emergency_type', 'Emergency')} (Dynamic Replan)",
+            "incident": f"{inc_data.get('title') or inc_data.get('emergency_type') or inc_data.get('type') or 'Emergency'} (Dynamic Replan)",
             "priority": "Critical",
             "ambulance": alt_amb["code"],
             "hospital": hosp_obj["code"],
+            "allocated_ambulance": alt_amb,
+            "allocated_hospital": hosp_obj,
             "route": " -> ".join(new_path),
+            "selected_route": {"path": new_path, "cost": route_cost, "algorithm": "A_Star"},
             "risk": "HIGH (Replanned)",
+            "risk_assessment": {"risk_level": "HIGH", "composite_risk_score": 0.75},
             "plan": htn_res.get("summary", "HTN Replanned Protocol"),
+            "action_plan": htn_res,
             "reason": f"Dynamic replan: Unit {failed_amb} failed ({reason}). Reallocated to {alt_code} along {' -> '.join(new_path)}.",
+            "explanation": f"Dynamic replanning triggered due to {failed_amb} failure ({reason}). Reallocated to {alt_code} along {' -> '.join(new_path)}.",
         }
         record_decision(replan_record)
 
@@ -480,9 +516,10 @@ class Orchestrator:
             "ambulance": alt_amb,
             "allocated_hospital": hosp_obj,
             "hospital": hosp_obj,
-            "route": {"path": new_path, "cost": round(leg1.cost + leg2.cost, 2), "algorithm": "A_Star"},
+            "route": {"path": new_path, "cost": route_cost, "algorithm": "A_Star"},
             "new_plan": htn_res["final_plan"],
             "plan": htn_res,
+            "action_plan": htn_res,
             "explanation": f"Dynamic replanning triggered due to {failed_amb} failure ({reason}). Reallocated to {alt_code} with split-transport protocol along {' -> '.join(new_path)}.",
         }
 

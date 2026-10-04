@@ -41,7 +41,14 @@ DECISION_STORE: List[Dict[str, Any]] = [
 def record_decision(decision_record: Dict[str, Any]) -> Dict[str, Any]:
     if "date" not in decision_record:
         decision_record["date"] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M")
-    max_id = max([d.get("id", 0) for d in DECISION_STORE if isinstance(d.get("id"), int)] or [0])
+    valid_ids = []
+    for d in DECISION_STORE:
+        v = d.get("id")
+        if isinstance(v, int):
+            valid_ids.append(v)
+        elif isinstance(v, str) and v.isdigit():
+            valid_ids.append(int(v))
+    max_id = max(valid_ids) if valid_ids else 0
     decision_record["id"] = max_id + 1
     DECISION_STORE.append(decision_record)
     return decision_record

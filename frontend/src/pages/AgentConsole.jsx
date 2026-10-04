@@ -61,10 +61,15 @@ export default function AgentConsole() {
   const handleReplan = async () => {
     setLoading(true);
     try {
-      const failedUnit = agentData?.allocation?.ambulance || 'A2';
+      const activeUnit =
+        replanData?.allocated_ambulance?.code ||
+        replanData?.ambulance?.code ||
+        agentData?.allocation?.ambulance ||
+        'A2';
+      const cleanUnit = String(activeUnit).split(' ')[0].split('+')[0];
       const res = await replanAgent({
         incident_id: 'INC-CONSOLE',
-        unavailable_ambulance: failedUnit,
+        unavailable_ambulance: cleanUnit,
         victim_count: agentData?.extracted?.victim_count || 6,
         location: agentData?.extracted?.location || 'N1',
         weather: agentData?.extracted?.weather || 'Heavy Rain',

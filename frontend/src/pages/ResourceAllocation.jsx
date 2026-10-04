@@ -25,11 +25,18 @@ export default function ResourceAllocation() {
 
   const handleSimulateBreakdown = async () => {
     try {
-      const ambCode = data?.assignment?.ambulance || 'A2';
+      const ambCode =
+        replanData?.allocated_ambulance?.code ||
+        replanData?.ambulance?.code ||
+        data?.assignment?.ambulance ||
+        'A2';
+      const cleanCode = String(ambCode).split(' ')[0].split('+')[0];
       const res = await replanResponse({
         incident_id: 'INC-101',
-        failed_ambulance_code: ambCode,
-        reason: `${ambCode} unavailable — dynamic CSP reallocation triggered`,
+        failed_ambulance_code: cleanCode,
+        victim_count: victims,
+        location: location,
+        reason: `${cleanCode} unavailable — dynamic CSP reallocation triggered`,
       });
       setReplanData(res.data);
     } catch (e) {

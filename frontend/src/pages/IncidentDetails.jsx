@@ -114,6 +114,29 @@ export default function IncidentDetails() {
             {planData ? planData.explanation : incident.plan}
           </p>
         </div>
+
+        {planData && (
+          <div className="pt-4 border-t border-slate-700 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div className="bg-slate-900/60 p-3 rounded border border-slate-700">
+              <span className="text-slate-400 text-xs block">Assigned Ambulance</span>
+              <span className="font-mono font-semibold text-emerald-400">
+                {planData.allocated_ambulance?.code || planData.ambulance?.code || 'None'}
+              </span>
+            </div>
+            <div className="bg-slate-900/60 p-3 rounded border border-slate-700">
+              <span className="text-slate-400 text-xs block">Destination Hospital</span>
+              <span className="font-mono font-semibold text-blue-400">
+                {planData.allocated_hospital?.name || planData.allocated_hospital?.code || planData.hospital?.code || 'None'}
+              </span>
+            </div>
+            <div className="bg-slate-900/60 p-3 rounded border border-slate-700">
+              <span className="text-slate-400 text-xs block">Calculated Route</span>
+              <span className="font-mono text-xs text-amber-300">
+                {Array.isArray(planData.route?.path) ? planData.route.path.join(' → ') : (planData.route || 'Direct')}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

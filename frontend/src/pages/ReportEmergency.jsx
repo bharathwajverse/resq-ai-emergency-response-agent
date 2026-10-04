@@ -125,13 +125,16 @@ export default function ReportEmergency() {
     setLoading(true);
     try {
       const currentAmb =
+        replanResult?.allocated_ambulance?.code ||
+        replanResult?.ambulance?.code ||
         planResult.allocated_ambulance?.code ||
         planResult.ambulance?.code ||
         'A2';
+      const cleanCode = String(currentAmb).split(' ')[0].split('+')[0];
       const repRes = await replanResponse({
         incident_id: planResult.incident_id,
-        failed_ambulance_code: currentAmb.split('+')[0],
-        reason: `Simulated breakdown of ${currentAmb} en route`,
+        failed_ambulance_code: cleanCode,
+        reason: `Simulated breakdown of ${cleanCode} en route`,
       });
       setReplanResult(repRes.data);
     } catch (e) {
