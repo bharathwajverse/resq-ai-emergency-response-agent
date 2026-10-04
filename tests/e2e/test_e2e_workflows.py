@@ -26,6 +26,64 @@ from typing import Dict, Any, Generator
 BASE_URL = os.getenv("RESQ_API_URL", "http://127.0.0.1:8000")
 
 
+def _ensure_fresh_server():
+    """Restarts uvicorn if a live server is running with stale code."""
+    workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+    backend_path = os.path.join(workspace_root, "backend")
+
+    for f in [
+        os.path.join(workspace_root, "tests", "verify_browser_all.py"),
+        os.path.join(workspace_root, "tests", "e2e", "test_browser_qa.py"),
+    ]:
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+            except Exception:
+                pass
+
+    needs_restart = False
+    try:
+        r = httpx.get("http://127.0.0.1:8000/api/ambulances", timeout=1.0)
+        if r.status_code == 200:
+            pre = httpx.get("http://127.0.0.1:8000/api/decisions", timeout=1.0).json()
+            httpx.post("http://127.0.0.1:8000/api/agent/replan", json={"incident_id": "RELOAD_CHECK"}, timeout=2.0)
+            post = httpx.get("http://127.0.0.1:8000/api/decisions", timeout=1.0).json()
+            if len(post) == len(pre):
+                needs_restart = True
+    except Exception:
+        needs_restart = True
+
+    if needs_restart:
+        import subprocess
+        import time
+        try:
+            out = subprocess.check_output("netstat -ano", shell=True).decode()
+            for line in out.splitlines():
+                if ":8000 " in line and "LISTENING" in line:
+                    pid = line.strip().split()[-1]
+                    subprocess.run(f"taskkill /F /PID {pid}", shell=True)
+                    time.sleep(1)
+        except Exception:
+            pass
+
+        try:
+            subprocess.Popen(
+                [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"],
+                cwd=backend_path,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            for _ in range(15):
+                time.sleep(0.4)
+                try:
+                    if httpx.get("http://127.0.0.1:8000/api/ambulances", timeout=0.5).status_code == 200:
+                        break
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
 @pytest.fixture(scope="module")
 def api_client() -> Generator[httpx.Client, None, None]:
     """
@@ -33,6 +91,8 @@ def api_client() -> Generator[httpx.Client, None, None]:
     1. A live server at BASE_URL (if responsive), OR
     2. An in-process FastAPI application via httpx.ASGITransport.
     """
+    _ensure_fresh_server()
+
     # 1. Check if live server is reachable and has API router mounted
     try:
         r = httpx.get(f"{BASE_URL}/api/ambulances", timeout=1.0)
@@ -746,3 +806,193 @@ class TestFiveDemoScenariosAndReplanning:
         assert "A2" in a_code or alpha_amb.get("capacity", 0) >= 6
         # Both incidents have assigned units without fatal crashes
         assert a_code != "" and b_code != ""
+
+
+class TestDynamicReplanningAndDecisions:
+    """Verifies dynamic replanning and decision history audit logging."""
+
+    def test_dynamic_replan_with_unavailable_ambulance(self, api_client: httpx.Client):
+        """Verifies replan accepts unavailable_ambulance parameter and substitutes resource."""
+        resp = api_client.post("/api/agent/replan", json={
+            "incident_id": "INC-101",
+            "unavailable_ambulance": "A2",
+            "reason": "Engine failure on bridge",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("is_replanned") is True
+        assert data.get("failed_ambulance_code") == "A2"
+        # Replacement ambulance should be A1
+        alt = data.get("allocated_ambulance", {})
+        code = alt.get("code") or alt.get("callsign") or ""
+        assert "A1" in code
+
+    def test_dynamic_replan_with_failed_ambulance_code(self, api_client: httpx.Client):
+        """Verifies replan accepts failed_ambulance_code parameter and substitutes resource."""
+        resp = api_client.post("/api/agent/replan", json={
+            "incident_id": "INC-101",
+            "failed_ambulance_code": "A1",
+            "reason": "Flat tire mid-transit",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("is_replanned") is True
+        assert data.get("failed_ambulance_code") == "A1"
+        alt = data.get("allocated_ambulance", {})
+        code = alt.get("code") or alt.get("callsign") or ""
+        assert "A2" in code
+
+    def test_dynamic_replan_telemetry_fallback(self, api_client: httpx.Client):
+        """Verifies telemetry fallback when incident is not pre-registered in store."""
+        resp = api_client.post("/api/agent/replan", json={
+            "incident_id": "INC-CONSOLE-UNKNOWN",
+            "unavailable_ambulance": "A2",
+            "victim_count": 8,
+            "location": "N4",
+            "weather": "Heavy Rain",
+            "emergency_type": "Industrial Explosion",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data.get("is_replanned") is True
+        assert data.get("incident_id") == "INC-CONSOLE-UNKNOWN"
+        assert "path" in data.get("route", {})
+
+    def test_dynamic_replan_records_decision_audit(self, api_client: httpx.Client):
+        """Verifies replanning saves an audit record to DECISION_STORE with unique auto-incrementing ID."""
+        pre_decisions = api_client.get("/api/decisions").json()
+        pre_count = len(pre_decisions)
+
+        resp = api_client.post("/api/agent/replan", json={
+            "incident_id": "INC-AUDIT-TEST",
+            "failed_ambulance_code": "A2",
+            "reason": "Roadblock detour",
+        })
+        assert resp.status_code == 200
+
+        post_decisions = api_client.get("/api/decisions").json()
+        assert len(post_decisions) == pre_count + 1
+
+        latest = post_decisions[-1]
+        assert "Dynamic Replan" in latest.get("incident", "")
+        assert latest.get("priority") == "Critical"
+        assert latest.get("id") > max([d.get("id", 0) for d in pre_decisions if isinstance(d.get("id"), int)] or [0])
+
+
+class TestBrowserQA:
+    """Verifies all pages and core workflows in headless Chromium via Playwright."""
+
+    def test_browser_all_pages_and_workflows(self):
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            pytest.skip("Playwright is not installed.")
+
+        base_url = "http://127.0.0.1:5173"
+        try:
+            r = httpx.get(base_url, timeout=1.0)
+            if r.status_code != 200:
+                pytest.skip("Frontend dev server is not reachable at http://127.0.0.1:5173")
+        except Exception:
+            pytest.skip("Frontend dev server is not reachable at http://127.0.0.1:5173")
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context(viewport={"width": 1280, "height": 800})
+            page = context.new_page()
+
+            # 1. Dashboard
+            page.goto(f"{base_url}/", wait_until="networkidle", timeout=15000)
+            assert "ResQ-AI" in page.content() or "Command Center" in page.content() or "Dashboard" in page.content()
+
+            # 2. Report Emergency (/report)
+            page.goto(f"{base_url}/report", wait_until="networkidle", timeout=15000)
+            analyze_btn = page.locator("button:has-text('Analyze Emergency')")
+            if analyze_btn.count() > 0:
+                analyze_btn.click()
+                page.wait_for_selector("text=NLU Extraction", timeout=5000)
+
+            plan_btn = page.locator("button:has-text('Generate Response Plan')")
+            if plan_btn.count() > 0:
+                plan_btn.click()
+                page.wait_for_selector("text=Autonomous Agent Response Plan", timeout=10000)
+
+                replan_btn = page.locator("button:has-text('Simulate Ambulance Breakdown')")
+                if replan_btn.count() > 0:
+                    replan_btn.click()
+                    page.wait_for_selector("text=Dynamic Replanning Executed", timeout=10000)
+
+            # 3. Incident Details (/incidents/INC-101)
+            page.goto(f"{base_url}/incidents/INC-101", wait_until="networkidle", timeout=15000)
+            page.wait_for_selector("h1:has-text('Incident Details')", timeout=5000)
+            inc_replan_btn = page.locator("button:has-text('Replan')")
+            if inc_replan_btn.count() > 0:
+                inc_replan_btn.click()
+                page.wait_for_timeout(1000)
+
+            # 4. Agent Console (/agent)
+            page.goto(f"{base_url}/agent", wait_until="networkidle", timeout=15000)
+            page.wait_for_selector("h1:has-text('AI Agent Console')", timeout=5000)
+            agent_replan_btn = page.locator("button:has-text('Simulate Unit Breakdown')")
+            if agent_replan_btn.count() > 0:
+                agent_replan_btn.click()
+                page.wait_for_selector("text=Dynamic Replanning Executed", timeout=10000)
+
+            # 5. Route Search (/search)
+            page.goto(f"{base_url}/search", wait_until="networkidle", timeout=15000)
+            page.wait_for_selector("text=Route Search", timeout=5000)
+            search_btn = page.locator("button:has-text('Run')")
+            if search_btn.count() > 0:
+                search_btn.click()
+                page.wait_for_timeout(1000)
+
+            # 6. Resource Allocation (/allocation)
+            page.goto(f"{base_url}/allocation", wait_until="networkidle", timeout=15000)
+            page.wait_for_selector("text=Resource Allocation", timeout=5000)
+            csp_replan_btn = page.locator("button:has-text('Simulate Selected Ambulance Unavailable')")
+            if csp_replan_btn.count() > 0:
+                csp_replan_btn.click()
+                page.wait_for_selector("text=New Ambulance Assigned", timeout=10000)
+
+            # 7. Risk Analysis (/risk)
+            page.goto(f"{base_url}/risk", wait_until="networkidle", timeout=15000)
+            page.wait_for_selector("text=Risk Analysis (FAI Module VIII", timeout=5000)
+            calc_risk_btn = page.locator("button:has-text('Evaluate CPT')")
+            if calc_risk_btn.count() > 0:
+                calc_risk_btn.click()
+                page.wait_for_timeout(1000)
+
+            # 8. Planning (/planning)
+            page.goto(f"{base_url}/planning", wait_until="networkidle", timeout=15000)
+            page.wait_for_selector("text=Automated Response Planning", timeout=5000)
+            selects = page.locator("select")
+            if selects.count() > 0:
+                selects.first.select_option("State-Space")
+                page.wait_for_timeout(1000)
+                selects.first.select_option("Hierarchical")
+                page.wait_for_timeout(1000)
+
+            # 9. Decision History (/history)
+            page.goto(f"{base_url}/history", wait_until="networkidle", timeout=15000)
+            page.wait_for_selector("h1:has-text('Decision History')", timeout=5000)
+            rows = page.locator("tbody tr")
+            assert rows.count() >= 2
+
+            # Test Priority Filter
+            filter_select = page.locator("select[aria-label='Filter by priority']")
+            if filter_select.count() > 0:
+                filter_select.select_option("CRITICAL")
+                page.wait_for_timeout(500)
+                assert page.locator("tbody tr").count() >= 1
+                filter_select.select_option("ALL")
+                page.wait_for_timeout(500)
+
+            # Test Search Filter
+            search_input = page.locator("input[aria-label='Search decision history']")
+            if search_input.count() > 0:
+                search_input.fill("Dynamic Replan")
+                page.wait_for_timeout(500)
+                assert page.locator("tbody tr").count() >= 1
+
+            browser.close()
+

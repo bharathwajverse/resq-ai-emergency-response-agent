@@ -38,10 +38,12 @@ export default function IncidentDetails() {
 
   const handleReplan = async () => {
     if (!incident) return;
+    const ambCode = planData?.allocated_ambulance?.code || (typeof incident.ambulance === 'string' ? incident.ambulance : incident.ambulance?.code) || 'A2';
+    const cleanCode = String(ambCode).split(' ')[0].split('+')[0];
     const res = await replanResponse({
       incident_id: incident.id,
-      failed_ambulance_code: 'A2',
-      reason: 'Unit A2 mechanical failure mid-route',
+      failed_ambulance_code: cleanCode,
+      reason: `Unit ${cleanCode} mechanical failure mid-route`,
     });
     setPlanData(res.data);
   };

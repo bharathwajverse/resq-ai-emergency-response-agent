@@ -413,10 +413,19 @@ class Orchestrator:
             }
 
         inc_id = payload.get("incident_id", "INC-1")
-        failed_amb = str(payload.get("failed_ambulance_code", "A2")).upper()
+        failed_amb = str(
+            payload.get("failed_ambulance_code")
+            or payload.get("unavailable_ambulance")
+            or "A2"
+        ).upper()
         reason = payload.get("reason", "Unit unavailable")
 
-        inc_data = INCIDENT_STORE.get(inc_id, {"location": "N1", "victim_count": 6, "emergency_type": "Traffic Accident"})
+        inc_data = INCIDENT_STORE.get(inc_id) or {
+            "location": payload.get("location", "N1"),
+            "victim_count": int(payload.get("victim_count", 6)),
+            "emergency_type": payload.get("emergency_type", "Road accident"),
+            "weather": payload.get("weather", "Clear"),
+        }
         loc = str(inc_data.get("location", "N1"))
         if loc not in self.graph.nodes:
             loc = "N1"
@@ -446,6 +455,19 @@ class Orchestrator:
             location=loc,
             victims=int(inc_data.get("victim_count", 6)),
         )
+
+        replan_record = {
+            "incident_id": inc_id,
+            "incident": f"{inc_data.get('title') or inc_data.get('emergency_type', 'Emergency')} (Dynamic Replan)",
+            "priority": "Critical",
+            "ambulance": alt_amb["code"],
+            "hospital": hosp_obj["code"],
+            "route": " -> ".join(new_path),
+            "risk": "HIGH (Replanned)",
+            "plan": htn_res.get("summary", "HTN Replanned Protocol"),
+            "reason": f"Dynamic replan: Unit {failed_amb} failed ({reason}). Reallocated to {alt_code} along {' -> '.join(new_path)}.",
+        }
+        record_decision(replan_record)
 
         return {
             "status": "replanned",

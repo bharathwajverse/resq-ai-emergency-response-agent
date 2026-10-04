@@ -33,9 +33,11 @@ export default function DecisionHistory() {
   }, []);
 
   const filtered = decisions.filter((d) => {
+    const pStr = String(d.priority || '').toUpperCase();
     const matchesPriority =
       priorityFilter === 'ALL' ||
-      String(d.priority || '').toUpperCase() === priorityFilter;
+      pStr === priorityFilter ||
+      pStr.includes(priorityFilter);
     const q = query.trim().toLowerCase();
     const matchesQuery =
       !q ||
