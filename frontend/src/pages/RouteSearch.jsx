@@ -1,114 +1,206 @@
-import { useState } from 'react';
-import { runSearch } from '../services/api';
+import { useState, useEffect } from 'react';
+import { runSearch, getGraph } from '../services/api';
 import { Play } from 'lucide-react';
 
 export default function RouteSearch() {
   const [algo, setAlgo] = useState('A*');
-  const [source, setSource] = useState('Incident Site');
-  const [dest, setDest] = useState('City Hospital');
+  const [source, setSource] = useState('A2');
+  const [dest, setDest] = useState('H1');
+  const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
   const [result, setResult] = useState(null);
 
   const algorithms = ['UCS', 'A*', 'Best First', 'Hill Climbing', 'Beam Search', 'DLS', 'IDS'];
 
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const [gRes, sRes] = await Promise.all([
+          getGraph(),
+          runSearch({ algorithm: 'A*', start_node: 'A2', goal_node: 'H1' }),
+        ]);
+        if (gRes.data) setGraphData(gRes.data);
+        if (sRes.data) setResult(sRes.data);
+      } catch (e) {
+        console.error('RouteSearch init error:', e);
+      }
+    };
+    init();
+  }, []);
+
   const handleSearch = async () => {
     try {
-      // Fake API call
-      const res = await runSearch({ algorithm: algo, source, destination: dest });
+      const res = await runSearch({ algorithm: algo, start_node: source, goal_node: dest });
       setResult(res.data);
     } catch (e) {
-      setResult({
-        path: ['Incident Site', 'Node A', 'Node B', 'City Hospital'],
-        cost: 15.5,
-        explored: 42,
-        blocked: 3
-      });
+      console.error('Search error:', e);
     }
+  };
+
+  const nodeMap = {};
+  (graphData.nodes || []).forEach((n) => {
+    nodeMap[n.id] = n;
+  });
+
+  // Scale node (x, y) in [0..14, 0..10] to SVG viewBox [0..700, 0..440]
+  const scaleX = (x) => 50 + (Number(x || 0) / 13.0) * 600;
+  const scaleY = (y) => 390 - (Number(y || 0) / 10.0) * 340;
+
+  const isEdgeOnPath = (u, v) => {
+    if (!result || !Array.isArray(result.path)) return false;
+    for (let i = 0; i < result.path.length - 1; i++) {
+      const a = result.path[i];
+      const b = result.path[i + 1];
+      if ((a === u && b === v) || (a === v && b === u)) return true;
+    }
+    return false;
   };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Route Search Visualization</h1>
-      
+      <div>
+        <h1 className="text-2xl font-bold">Emergency Road Network &amp; Route Search (Modules II &amp; III)</h1>
+        <p className="text-sm text-slate-400">
+          Interactive 13-node weighted graph executing UCS, DLS, IDS, A*, Best-First, Hill Climbing, and Beam Search
+        </p>
+      </div>
+
       <div className="bg-slate-800 p-6 rounded-lg border border-slate-700 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         <div>
-          <label className="block text-sm font-medium text-slate-400 mb-1">Algorithm</label>
+          <label className="block text-sm font-medium text-slate-400 mb-1">Search Algorithm</label>
           <select value={algo} onChange={(e) => setAlgo(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-md p-2">
-            {algorithms.map(a => <option key={a}>{a}</option>)}
+            {algorithms.map((a) => (
+              <option key={a} value={a}>{a}</option>
+            ))}
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-400 mb-1">Source Node</label>
-          <input value={source} onChange={(e) => setSource(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-md p-2" />
+          <select value={source} onChange={(e) => setSource(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-md p-2">
+            {(graphData.nodes || []).map((n) => (
+              <option key={n.id} value={n.id}>{n.id} — {n.name}</option>
+            ))}
+          </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-400 mb-1">Destination Node</label>
-          <input value={dest} onChange={(e) => setDest(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-md p-2" />
+          <select value={dest} onChange={(e) => setDest(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-md p-2">
+            {(graphData.nodes || []).map((n) => (
+              <option key={n.id} value={n.id}>{n.id} — {n.name}</option>
+            ))}
+          </select>
         </div>
         <div>
-          <button onClick={handleSearch} className="w-full flex justify-center items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md transition-colors">
+          <button
+            onClick={handleSearch}
+            className="w-full flex justify-center items-center px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md font-medium transition-colors"
+          >
             <Play className="w-4 h-4 mr-2" /> Run Search
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-slate-900 border border-slate-700 rounded-lg p-4 h-[500px] flex items-center justify-center relative overflow-hidden">
-          {/* Mock Graph Visualization using basic HTML/CSS */}
-          <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:2rem_2rem] opacity-30"></div>
-          
-          <div className="relative w-full h-full">
-             {result && result.path.map((node, i) => (
-                <div key={node} className="absolute flex flex-col items-center" style={{ left: `${20 + (i * 20)}%`, top: `${50 + (i % 2 === 0 ? -15 : 15)}%` }}>
-                  <div className="w-8 h-8 bg-blue-500 rounded-full border-2 border-white shadow-[0_0_15px_rgba(59,130,246,0.5)] z-10 flex items-center justify-center text-xs font-bold">{i+1}</div>
-                  <span className="text-xs mt-2 font-mono bg-slate-800 px-1 rounded">{node}</span>
-                </div>
-             ))}
-             {result && result.path.length > 0 && (
-               <svg className="absolute inset-0 w-full h-full z-0 pointer-events-none" style={{ paddingLeft: '1rem', paddingTop: '1rem' }}>
-                 <path 
-                   d={result.path.map((_, i) => `${i === 0 ? 'M' : 'L'} ${20 + (i * 20)}% ${50 + (i % 2 === 0 ? -15 : 15)}%`).join(' ')} 
-                   stroke="#3b82f6" 
-                   strokeWidth="3" 
-                   fill="none" 
-                   strokeDasharray="5,5" 
-                   className="animate-[dash_1s_linear_infinite]" 
-                 />
-               </svg>
-             )}
-             {!result && <p className="text-slate-500 absolute inset-0 flex items-center justify-center z-10">Run a search to visualize the graph traversal</p>}
-          </div>
+        <div className="lg:col-span-2 bg-slate-900 border border-slate-700 rounded-lg p-4 h-[480px] flex flex-col justify-between">
+          <svg viewBox="0 0 700 440" className="w-full h-full">
+            {/* Render all 17 Road Edges */}
+            {(graphData.edges || []).map((edge, idx) => {
+              const u = nodeMap[edge.source];
+              const v = nodeMap[edge.target];
+              if (!u || !v) return null;
+              const x1 = scaleX(u.x);
+              const y1 = scaleY(u.y);
+              const x2 = scaleX(v.x);
+              const y2 = scaleY(v.y);
+              const active = isEdgeOnPath(edge.source, edge.target);
+              return (
+                <g key={idx}>
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={edge.is_blocked ? '#ef4444' : active ? '#3b82f6' : '#334155'}
+                    strokeWidth={active ? 4 : 2}
+                    strokeDasharray={edge.is_blocked ? '6,4' : undefined}
+                  />
+                  <text
+                    x={(x1 + x2) / 2}
+                    y={(y1 + y2) / 2 - 4}
+                    fill={edge.is_blocked ? '#f87171' : '#94a3b8'}
+                    fontSize="10"
+                    textAnchor="middle"
+                  >
+                    {edge.is_blocked ? 'BLOCKED' : `${edge.distance}km`}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Render all 13 Road Nodes */}
+            {(graphData.nodes || []).map((node) => {
+              const cx = scaleX(node.x);
+              const cy = scaleY(node.y);
+              const inPath = result?.path?.includes(node.id);
+              const fill =
+                node.id.startsWith('H')
+                  ? '#10b981'
+                  : node.id.startsWith('A')
+                  ? '#f59e0b'
+                  : inPath
+                  ? '#3b82f6'
+                  : '#475569';
+              return (
+                <g key={node.id}>
+                  <circle
+                    cx={cx}
+                    cy={cy}
+                    r={inPath ? 16 : 13}
+                    fill={fill}
+                    stroke={inPath ? '#ffffff' : '#1e293b'}
+                    strokeWidth={inPath ? 3 : 1.5}
+                  />
+                  <text x={cx} y={cy + 4} fill="#ffffff" fontSize="10" fontWeight="bold" textAnchor="middle">
+                    {node.id}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
         </div>
-        
+
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-          <h3 className="text-lg font-bold mb-4">Search Results</h3>
+          <h3 className="text-lg font-bold mb-4">Search Telemetry</h3>
           {result ? (
             <div className="space-y-4">
               <div className="p-3 bg-slate-900 rounded border border-slate-700">
-                <p className="text-sm text-slate-400">Path Cost</p>
+                <p className="text-xs text-slate-400">Algorithm</p>
+                <p className="text-sm font-bold text-emerald-400">{result.algorithm_name || algo}</p>
+              </div>
+              <div className="p-3 bg-slate-900 rounded border border-slate-700">
+                <p className="text-xs text-slate-400">Total Traversal Cost</p>
                 <p className="text-xl font-bold text-blue-400">{result.cost}</p>
               </div>
               <div className="p-3 bg-slate-900 rounded border border-slate-700">
-                <p className="text-sm text-slate-400">Nodes Explored</p>
-                <p className="text-xl font-bold text-purple-400">{result.explored}</p>
+                <p className="text-xs text-slate-400">Nodes Explored</p>
+                <p className="text-xl font-bold text-purple-400">{result.nodes_explored ?? result.explored}</p>
               </div>
               <div className="p-3 bg-slate-900 rounded border border-slate-700">
-                <p className="text-sm text-slate-400">Blocked Routes Avoided</p>
+                <p className="text-xs text-slate-400">Blocked Edges in Network</p>
                 <p className="text-xl font-bold text-red-400">{result.blocked}</p>
               </div>
               <div>
-                <p className="text-sm text-slate-400 mb-2">Final Path</p>
-                <div className="flex flex-wrap gap-2 text-sm font-mono">
-                  {result.path.map((node, i) => (
-                    <span key={i} className="px-2 py-1 bg-slate-700 rounded flex items-center">
-                      {node}
-                      {i < result.path.length - 1 && <span className="mx-1 text-slate-400">→</span>}
+                <p className="text-xs text-slate-400 mb-2">Computed Path Sequence</p>
+                <div className="flex flex-wrap gap-1.5 text-xs font-mono">
+                  {(result.path || []).map((n, i) => (
+                    <span key={i} className="bg-blue-900/40 border border-blue-700 text-blue-200 px-2 py-1 rounded">
+                      {n}
                     </span>
                   ))}
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No results yet.</p>
+            <p className="text-slate-400 text-sm">Select nodes and click Run Search.</p>
           )}
         </div>
       </div>

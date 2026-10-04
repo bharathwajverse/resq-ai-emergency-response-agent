@@ -40,8 +40,8 @@
 |------|---------|
 | **Algorithms** | Constraint Satisfaction Problem (CSP) with Backtracking + Constraint Propagation (AC-3/Forward Checking), Monte Carlo Tree Search (MCTS), Alpha-Beta Pruning |
 | **Source Files** | [`backend/app/csp/solver.py`](../backend/app/csp/solver.py), [`backend/app/csp/problem.py`](../backend/app/csp/problem.py), [`backend/app/csp/mcts.py`](../backend/app/csp/mcts.py), [`backend/app/csp/alpha_beta.py`](../backend/app/csp/alpha_beta.py) |
-| **Key Classes** | `CSPSolver`, `EmergencyCSPProblem`, `MCTSSimulator`, `AlphaBetaSearch` |
-| **Key Methods** | `CSPSolver.solve()`, `MCTSSimulator.search()`, `AlphaBetaSearch.search()` |
+| **Key Classes** | `CSPSolver`, `DispatchCSP`, `MCTSSimulator`, `AlphaBetaDecisionEngine` |
+| **Key Methods** | `CSPSolver.solve()`, `MCTSSimulator.solve()`, `AlphaBetaDecisionEngine.solve()` |
 | **CSP Variables** | incident → ambulance → hospital → route |
 | **CSP Constraints** | ambulance must be available, ambulance capacity ≥ victim count, one ambulance per incident, hospital capacity sufficient, blocked roads excluded |
 | **UI Pages** | Resource Allocation (`/allocation`), AI Algorithms Lab (`/lab`) |
@@ -55,13 +55,13 @@
 | Item | Details |
 |------|---------|
 | **Algorithms** | Forward Chaining, Backward Chaining, Resolution |
-| **Source Files** | [`backend/app/inference/engine.py`](../backend/app/inference/engine.py), [`backend/app/inference/resolution.py`](../backend/app/inference/resolution.py), [`backend/app/inference/rules.py`](../backend/app/inference/rules.py) |
-| **Key Classes** | `ForwardChainingEngine`, `BackwardChainingEngine`, `ResolutionProver` |
-| **Key Methods** | `ForwardChainingEngine.infer(facts)`, `BackwardChainingEngine.query(goal, facts)`, `ResolutionProver.prove(kb, query)` |
+| **Source Files** | [`backend/app/inference/forward_chaining.py`](../backend/app/inference/forward_chaining.py), [`backend/app/inference/backward_chaining.py`](../backend/app/inference/backward_chaining.py), [`backend/app/inference/engine.py`](../backend/app/inference/engine.py), [`backend/app/inference/resolution.py`](../backend/app/inference/resolution.py), [`backend/app/inference/rules.py`](../backend/app/inference/rules.py) |
+| **Key Classes** | `ForwardChainingEngine`, `BackwardChainingEngine`, `PropositionalResolutionEngine` |
+| **Key Methods** | `ForwardChainingEngine.infer(facts)`, `BackwardChainingEngine.prove(goal, facts)`, `PropositionalResolutionEngine.resolve(goal, clauses)` |
 | **Example Rules** | `IF victim_count > 5 AND severity == high THEN priority = critical` · `IF road_blocked THEN avoid_blocked_routes` · `IF hospital_capacity <= 0 THEN hospital_unavailable` · `IF ambulance_available AND capacity >= victims THEN ambulance_feasible` |
 | **Fact Types** | Propositional-style facts, FOL-inspired structured facts |
 | **UI Pages** | AI Agent Console (`/agent`), AI Algorithms Lab (`/lab`) |
-| **Tests** | Unit tests for forward chaining, backward chaining, and resolution |
+| **Tests** | [`backend/tests/unit/test_inference.py`](../backend/tests/unit/test_inference.py) |
 | **How Used** | Agent uses forward chaining to derive priority from incident facts, backward chaining to verify goal conditions, and resolution for proof demonstrations. All inference steps are logged. |
 
 ---
@@ -72,11 +72,12 @@
 |------|---------|
 | **Concepts** | Knowledge Base, Frames, Categories, Events, Relationships, Ontology |
 | **Source Files** | [`backend/app/knowledge/knowledge_base.py`](../backend/app/knowledge/knowledge_base.py), [`backend/app/knowledge/frames.py`](../backend/app/knowledge/frames.py), [`backend/app/knowledge/ontology.py`](../backend/app/knowledge/ontology.py), [`backend/app/knowledge/relationships.py`](../backend/app/knowledge/relationships.py) |
-| **Key Classes** | `KnowledgeBase`, `Frame`, `Ontology`, `Relationship` |
-| **Frames** | `IncidentFrame`, `AmbulanceFrame`, `HospitalFrame`, `RoadFrame`, `EmergencyResourceFrame` |
+| **Key Classes** | `KnowledgeBase`, `Frame`, `Ontology`, `RelationshipGraph` |
+| **Frames** | `Incident`, `Ambulance`, `Hospital`, `Road`, `Resource` (`create_canonical_frames()`) |
 | **Ontology Tree** | Emergency → {Medical Emergency, Road Accident, Fire, Flood, Natural Disaster} · Resource → {Ambulance, Fire Engine, Rescue Team, Hospital} |
-| **UI Pages** | Dashboard (`/`), AI Agent Console (`/agent`) |
-| **How Used** | The knowledge base stores structured facts about the emergency domain. Frames represent entity templates. The ontology classifies emergency and resource types. The agent queries the KB during reasoning. Frontend visualizes knowledge relationships. |
+| **UI Pages** | Dashboard (`/`), AI Agent Console (`/agent`), AI Algorithms Lab (`/lab`) |
+| **Tests** | [`backend/tests/unit/test_knowledge.py`](../backend/tests/unit/test_knowledge.py) |
+| **How Used** | The knowledge base stores structured facts about the emergency domain. Frames represent entity templates. The ontology classifies emergency and resource types. The agent queries the KB during reasoning. Frontend visualizes knowledge relationships on the Dashboard. |
 
 ---
 
@@ -85,12 +86,13 @@
 | Item | Details |
 |------|---------|
 | **Algorithms** | State-Space Planning, Partial-Order Planning (POP), Hierarchical Task Network (HTN) Planning |
-| **Source Files** | [`backend/app/planning/state_space.py`](../backend/app/planning/state_space.py), [`backend/app/planning/partial_order.py`](../backend/app/planning/partial_order.py), [`backend/app/planning/hierarchical.py`](../backend/app/planning/hierarchical.py) |
-| **Key Classes** | `StateSpacePlanner`, `PartialOrderPlanner`, `HierarchicalPlanner` |
-| **Key Methods** | `.plan(initial_state, goal_state)` → `Plan(actions, dependencies, initial_state, goal_state)` |
+| **Source Files** | [`backend/app/planning/state_space.py`](../backend/app/planning/state_space.py), [`backend/app/planning/pop.py`](../backend/app/planning/pop.py), [`backend/app/planning/htn.py`](../backend/app/planning/htn.py), [`backend/app/planning/strips.py`](../backend/app/planning/strips.py) |
+| **Key Classes** | `StateSpacePlanner`, `PartialOrderPlanner`, `HTNPlanner` |
+| **Key Methods** | `StateSpacePlanner.plan_detailed()`, `PartialOrderPlanner.solve()`, `HTNPlanner.plan_emergency()` |
 | **HTN Example** | Emergency Response → {Assess Incident, Allocate Resources, Navigate, Transfer Victims, Complete Incident} |
 | **UI Pages** | Planning (`/planning`), AI Algorithms Lab (`/lab`) |
-| **How Used** | Agent uses hierarchical planning to generate multi-step response plans. State-space and POP provide alternative planning strategies. All plans show initial state, goal, actions, and dependencies. |
+| **Tests** | [`backend/tests/unit/test_planning.py`](../backend/tests/unit/test_planning.py) |
+| **How Used** | Agent uses hierarchical planning to generate multi-step response plans. State-space and POP provide alternative planning strategies selectable live on `/planning`. All plans show initial state, goal, actions, and dependencies. |
 
 ---
 
@@ -100,11 +102,12 @@
 |------|---------|
 | **Algorithm** | Bayesian Risk Engine with Conditional Probability Tables |
 | **Source Files** | [`backend/app/uncertainty/bayesian.py`](../backend/app/uncertainty/bayesian.py) |
-| **Key Classes** | `BayesianRiskEngine` |
-| **Key Methods** | `.calculate_risk(evidence)` → risk scores for each variable |
+| **Key Classes** | `BayesianRiskEngine`, `calculate_risk` |
+| **Key Methods** | `.calculate(evidence)` / `calculate_risk(data)` → risk scores and CPT conditional probabilities for each variable |
 | **Variables** | Weather, Road Condition, Traffic, Travel Delay, Victim Severity, Hospital Capacity, Response Risk |
 | **Example Calculations** | `P(delay \| heavy_rain)`, `P(high_severity \| victim_count > 5)`, `P(hospital_overload \| multiple_incidents)` |
-| **UI Pages** | Risk Analysis (`/risk`) |
+| **UI Pages** | Risk Analysis (`/risk`), AI Algorithms Lab (`/lab`) |
+| **Tests** | [`backend/tests/unit/test_uncertainty.py`](../backend/tests/unit/test_uncertainty.py) |
 | **⚠️ Disclaimer** | All probabilities are **simulated/educational** — not real-world medical statistics |
 | **How Used** | Agent calculates response risk after route selection. Risk analysis page shows all probabilities with charts. |
 
@@ -116,11 +119,12 @@
 |------|---------|
 | **Algorithm** | Decision Tree (scikit-learn) |
 | **Source Files** | [`backend/app/learning/decision_tree.py`](../backend/app/learning/decision_tree.py) |
-| **Key Classes** | `DecisionTreeLearner` |
-| **Key Methods** | `.train(dataset)`, `.predict(features)`, `.get_tree_structure()`, `.get_feature_importance()` |
+| **Key Classes** | `DecisionTreeAgent` |
+| **Key Methods** | `.train()`, `.predict(features)`, `.get_tree_structure()`, `feature_importance` |
 | **Synthetic Dataset** | Features: victim_count, weather, traffic, distance, incident_type, severity → Target: priority |
 | **Metrics Shown** | Tree structure, entropy, information gain, feature importance, prediction accuracy |
 | **UI Pages** | AI Algorithms Lab (`/lab`) |
+| **Tests** | [`backend/tests/unit/test_learning.py`](../backend/tests/unit/test_learning.py) |
 | **How Used** | Decision tree learns from synthetic emergency data to predict incident priority. Shows the tree structure with entropy and information gain at each node. |
 
 ---
@@ -130,7 +134,7 @@
 | Item | Details |
 |------|---------|
 | **Source Files** | [`backend/app/agent/orchestrator.py`](../backend/app/agent/orchestrator.py), [`backend/app/agent/llm_service.py`](../backend/app/agent/llm_service.py), [`backend/app/agent/demo_parser.py`](../backend/app/agent/demo_parser.py) |
-| **Key Class** | `AgentOrchestrator` |
+| **Key Class** | `Orchestrator` |
 | **Agent Tools** | `parse_incident()`, `query_knowledge_base()`, `run_forward_chaining()`, `run_backward_chaining()`, `allocate_resources()`, `run_search()`, `calculate_bayesian_risk()`, `generate_plan()`, `evaluate_plan()`, `replan()`, `generate_explanation()` |
 | **Pipeline** | NL Input → Extraction → KB → Inference → Priority → CSP → Search → Risk → Planning → Evaluation → Decision → Explanation |
 | **LLM Usage** | Only for NLU parsing and final explanation generation |
