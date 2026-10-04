@@ -52,9 +52,24 @@ class PlanGenerateRequest(BaseModel):
     start_node: Optional[str] = None
     destination_node: Optional[str] = None
     emergency_type: Optional[str] = None
+    victim_count: Optional[int] = None
+    location: Optional[str] = None
     search_strategy: Optional[str] = "bfs"
     state: Optional[Dict[str, Any]] = None
     goal: Optional[Dict[str, Any]] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_paradigm(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "paradigm" in data and isinstance(data["paradigm"], str):
+            raw = data["paradigm"].strip().lower().replace("_", "-")
+            if raw in ("htn", "hierarchical"):
+                data["paradigm"] = PlanParadigm.HIERARCHICAL.value
+            elif raw in ("state-space", "statespace", "strips"):
+                data["paradigm"] = PlanParadigm.STATE_SPACE.value
+            elif raw in ("partial-order", "partialorder", "pop"):
+                data["paradigm"] = PlanParadigm.PARTIAL_ORDER.value
+        return data
 
 
 class PlanGenerateResponse(BaseModel):
