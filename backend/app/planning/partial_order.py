@@ -1,3 +1,20 @@
-class PartialOrderPlanner:
-    def plan(self, initial, goal, actions):
-        return {"plan": "Partial-Order Plan (simplified)", "actions": ["Start", "Dispatch", "Finish"]}
+"""
+ResQ-AI Partial-Order Planning (POP) Module.
+Backward-compatibility wrapper re-exporting PartialOrderPlanner from app.planning.pop.
+"""
+
+from app.planning.pop import (
+    PartialOrderPlanner,
+    POPPlan,
+    CausalLink,
+    OrderingConstraint,
+    OpenCondition,
+)
+
+__all__ = [
+    "PartialOrderPlanner",
+    "POPPlan",
+    "CausalLink",
+    "OrderingConstraint",
+    "OpenCondition",
+]

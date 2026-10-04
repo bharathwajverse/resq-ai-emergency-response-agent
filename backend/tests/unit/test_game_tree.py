@@ -51,3 +51,18 @@ def test_mcts_simulation_phases_and_convergence():
     # Optimal action must be the one with the maximum visit count
     max_visited_action = max(result.visit_counts.items(), key=lambda x: x[1])[0]
     assert result.optimal_action == max_visited_action
+
+
+def test_mcts_init_iterations_and_defaults():
+    """Verify MCTSSimulator defaults to 200 iterations and respects __init__ configuration."""
+    default_sim = MCTSSimulator()
+    assert default_sim.iterations == 200
+    res_default = default_sim.solve()
+    assert res_default.total_rollouts == 200
+    assert sum(res_default.visit_counts.values()) == 200
+
+    custom_sim = MCTSSimulator(iterations=80, rng_seed=99)
+    assert custom_sim.iterations == 80
+    res_custom = custom_sim.solve()
+    assert res_custom.total_rollouts == 80
+    assert sum(res_custom.visit_counts.values()) == 80

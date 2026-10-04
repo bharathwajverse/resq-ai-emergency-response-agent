@@ -55,14 +55,14 @@ class DispatchCSP:
         self.graph = graph or RoadGraph.build_canonical_network()
 
         # Canonical default fleet if not provided
-        self.ambulances = ambulances or [
+        self.ambulances = ambulances if ambulances is not None else [
             AmbulanceSpec(code="A1", status="Available", capacity=4, location="A1"),
             AmbulanceSpec(code="A2", status="Available", capacity=6, location="A2"),
             AmbulanceSpec(code="A3", status="Maintenance", capacity=6, location="A3"),
         ]
 
         # Canonical default hospitals if not provided
-        self.hospitals = hospitals or [
+        self.hospitals = hospitals if hospitals is not None else [
             HospitalSpec(code="H1", name="City General Hospital", location="H1", available_emergency_beds=15, specialties=["Trauma", "ICU"]),
             HospitalSpec(code="H2", name="St. Jude Clinic", location="H2", available_emergency_beds=5, specialties=["General", "Pediatrics"]),
         ]

@@ -1,9 +1,8 @@
-class HTNPlanner:
-    def plan(self, initial, goal):
-        return {
-            "initial_state": initial,
-            "goal_state": goal,
-            "actions": ["Assess Incident", "Allocate Resources", "Navigate", "Transfer Victims", "Complete"],
-            "dependencies": {"Allocate Resources": ["Assess Incident"], "Navigate": ["Allocate Resources"]},
-            "final_plan": ["Assess Incident", "Allocate Resources", "Navigate", "Transfer Victims", "Complete"]
-        }
+"""
+ResQ-AI Hierarchical Task Network (HTN) Planning Module.
+Backward-compatibility wrapper re-exporting HTNPlanner from app.planning.htn.
+"""
+
+from app.planning.htn import HTNPlanner, Task, HTNMethod
+
+__all__ = ["HTNPlanner", "Task", "HTNMethod"]

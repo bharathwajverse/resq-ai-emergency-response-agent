@@ -55,3 +55,16 @@ class ResolutionResponse(BaseModel):
     steps: List[str] = Field(default_factory=list)
     contradiction_found: bool
     execution_time_ms: float
+
+
+class InferenceResult(BaseModel):
+    """
+    Consolidated inference result contract conforming to PROJECT.md blueprint.
+    """
+    engine: str = Field(..., description="Engine used: 'forward', 'backward', or 'resolution'")
+    derived_facts: List[str] = Field(default_factory=list)
+    rule_firings: List[Dict[str, Any]] = Field(default_factory=list)
+    proof_tree: Optional[Dict[str, Any]] = None
+    refutation_successful: Optional[bool] = None
+    steps: List[str] = Field(default_factory=list)
+

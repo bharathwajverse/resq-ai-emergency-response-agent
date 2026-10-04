@@ -97,6 +97,23 @@ from app.schemas.lab import (
     LabRunRequest,
     LabRunResponse,
 )
+from app.schemas.knowledge import (
+    FrameSlotSchema,
+    FrameDetailSchema,
+    OntologyTaxonomyNode,
+    OntologyTaxonomyResponse,
+    SubsumptionCheckRequest,
+    SubsumptionCheckResponse,
+    LCSRequest,
+    LCSResponse,
+    MereologyQueryRequest,
+    MereologyQueryResponse,
+    KnowledgeGraphNode,
+    KnowledgeGraphEdge,
+    KnowledgeGraphExport,
+    CytoscapeGraphResponse,
+    D3GraphResponse,
+)
 
 __all__ = [
     "BaseSchema",
@@ -169,4 +186,19 @@ __all__ = [
     "DecisionDetailResponse",
     "LabRunRequest",
     "LabRunResponse",
+    "FrameSlotSchema",
+    "FrameDetailSchema",
+    "OntologyTaxonomyNode",
+    "OntologyTaxonomyResponse",
+    "SubsumptionCheckRequest",
+    "SubsumptionCheckResponse",
+    "LCSRequest",
+    "LCSResponse",
+    "MereologyQueryRequest",
+    "MereologyQueryResponse",
+    "KnowledgeGraphNode",
+    "KnowledgeGraphEdge",
+    "KnowledgeGraphExport",
+    "CytoscapeGraphResponse",
+    "D3GraphResponse",
 ]
