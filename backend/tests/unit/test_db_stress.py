@@ -36,10 +36,14 @@ from app.models import (
 # ==============================================================================
 
 def test_stress_default_engine_foreign_keys_pragma():
-    """Verify that the application's default engine enforces PRAGMA foreign_keys=1."""
-    with default_app_engine.connect() as conn:
-        res = conn.execute(text("PRAGMA foreign_keys")).scalar()
-        assert res == 1, f"Expected PRAGMA foreign_keys=1 on default engine, got {res}"
+    """Verify that if the application's default engine is SQLite, it enforces PRAGMA foreign_keys=1."""
+    if default_app_engine.dialect.name == "sqlite":
+        with default_app_engine.connect() as conn:
+            res = conn.execute(text("PRAGMA foreign_keys")).scalar()
+            assert res == 1, f"Expected PRAGMA foreign_keys=1 on default engine, got {res}"
+    else:
+        # PostgreSQL natively enforces foreign keys
+        assert default_app_engine.dialect.name in ("postgresql", "postgres")
 
 
 def test_stress_invalid_foreign_keys_all_relationships(db_session):

@@ -1,11 +1,25 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getIncidents, getAmbulances, getHospitals, getDecisions, getKnowledge } from '../services/api';
+import {
+  getIncidents,
+  getAmbulances,
+  getHospitals,
+  getDecisions,
+  getKnowledge,
+  createIncident,
+  planResponse,
+} from '../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { AlertCircle, Truck, Building2, Activity, Network, Layers } from 'lucide-react';
+import { AlertCircle, Truck, Building2, Activity, Network, Layers, Send, CheckCircle2 } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e'];
+
+const DASHBOARD_PRESETS = [
+  'Road accident near university at N1. 6 victims, heavy rain, road blocked.',
+  'Fire at Midtown industrial N4, 4 burn casualties, clear weather.',
+  'Cardiac emergency at Tech Park N6, 2 victims, immediate transport required.',
+];
 
 export default function Dashboard() {
   const [data, setData] = useState({
@@ -16,32 +30,60 @@ export default function Dashboard() {
     knowledge: null,
   });
   const [loading, setLoading] = useState(true);
+  const [quickText, setQuickText] = useState(DASHBOARD_PRESETS[0]);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchResult, setDispatchResult] = useState(null);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [incRes, ambRes, hosRes, decRes, kbRes] = await Promise.all([
+        getIncidents(),
+        getAmbulances(),
+        getHospitals(),
+        getDecisions(),
+        getKnowledge(),
+      ]);
+      setData({
+        incidents: incRes.data || [],
+        ambulances: ambRes.data || [],
+        hospitals: hosRes.data || [],
+        decisions: decRes.data || [],
+        knowledge: kbRes.data || null,
+      });
+    } catch (e) {
+      console.error('Dashboard fetch error:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [incRes, ambRes, hosRes, decRes, kbRes] = await Promise.all([
-          getIncidents(),
-          getAmbulances(),
-          getHospitals(),
-          getDecisions(),
-          getKnowledge(),
-        ]);
-        setData({
-          incidents: incRes.data || [],
-          ambulances: ambRes.data || [],
-          hospitals: hosRes.data || [],
-          decisions: decRes.data || [],
-          knowledge: kbRes.data || null,
-        });
-      } catch (e) {
-        console.error('Dashboard fetch error:', e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
+    fetchDashboardData();
   }, []);
+
+  const handleQuickDispatch = async (e) => {
+    if (e) e.preventDefault();
+    if (!quickText.trim() || dispatching) return;
+    setDispatching(true);
+    setDispatchResult(null);
+    try {
+      const planRes = await planResponse({
+        description: quickText,
+        location: 'N1',
+        victim_count: 6,
+        weather: 'Heavy Rain',
+        emergency_type: 'Road accident',
+      });
+      if (planRes.data) {
+        setDispatchResult(planRes.data);
+      }
+      await fetchDashboardData();
+    } catch (err) {
+      console.error('Quick dispatch failed:', err);
+    } finally {
+      setDispatching(false);
+    }
+  };
 
   if (loading) return <div className="p-8 text-center text-slate-300">Loading ResQ-AI Command Center...</div>;
 
@@ -114,6 +156,63 @@ export default function Dashboard() {
             <p className="text-2xl font-bold">{availableHospitals}</p>
           </div>
         </div>
+      </div>
+
+      {/* Quick Emergency Dispatch Bar on Dashboard */}
+      <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+            <Send className="w-3.5 h-3.5 text-blue-400" /> Quick Emergency Dispatch (Autonomous Classical AI Planning)
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {DASHBOARD_PRESETS.map((preset, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setQuickText(preset)}
+                className="text-xs px-2.5 py-1 rounded bg-slate-900 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+              >
+                Preset {idx + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+        <form onSubmit={handleQuickDispatch} className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={quickText}
+            onChange={(e) => setQuickText(e.target.value)}
+            placeholder="Describe emergency situation..."
+            aria-label="Quick emergency report"
+            className="flex-1 bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-sm text-slate-100 focus:border-blue-500"
+          />
+          <button
+            type="submit"
+            disabled={dispatching}
+            className="flex items-center justify-center px-5 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white rounded-md text-sm font-semibold shrink-0 transition-colors"
+          >
+            <Send className="w-4 h-4 mr-1.5" />
+            {dispatching ? 'Dispatching...' : 'Dispatch Plan'}
+          </button>
+        </form>
+
+        {dispatchResult && (
+          <div className="bg-slate-900 p-3 rounded border border-green-800/60 text-xs space-y-1">
+            <div className="flex items-center justify-between text-green-400 font-bold">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4" /> Autonomous Response Plan Executed (Incident {dispatchResult.incident_id})
+              </span>
+              <span className="font-mono bg-green-950/80 px-2 py-0.5 rounded border border-green-700/60">
+                {dispatchResult.priority}
+              </span>
+            </div>
+            <p className="text-slate-300">
+              <strong>Ambulance:</strong> <span className="text-emerald-300 font-mono">{dispatchResult.allocated_ambulance?.code}</span> |{' '}
+              <strong>Hospital:</strong> <span className="text-blue-300 font-mono">{dispatchResult.allocated_hospital?.name}</span> |{' '}
+              <strong>Route:</strong> <span className="text-purple-300 font-mono">{(dispatchResult.route?.path || []).join(' -> ')}</span> ({dispatchResult.route?.cost}m)
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

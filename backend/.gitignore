@@ -1,0 +1,8 @@
+# Ignore local environment file containing credentials
+.env
+.env.local
+.env.*.local
+*.pyc
+__pycache__/
+.pytest_cache/
+resq_ai.db

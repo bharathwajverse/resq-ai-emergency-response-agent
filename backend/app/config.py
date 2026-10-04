@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     DEMO_MODE: bool = True
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-1.5-flash"
+    LLM_API_KEY: str = ""
+    LLM_PROVIDER: str = ""
 
     # Startup Automation
     AUTO_SEED_ON_STARTUP: bool = True
@@ -50,7 +52,7 @@ class Settings(BaseSettings):
     DISCLAIMER_TEXT: str = "Educational simulation - not for real-world emergency dispatch."
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,

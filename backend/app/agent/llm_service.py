@@ -29,7 +29,8 @@ class LLMService:
     """
 
     def __init__(self):
-        self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        self.api_key = os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("LLM_API_KEY", "").strip()
+        self.provider = os.getenv("LLM_PROVIDER", "gemini").strip()
         self.demo_mode = not bool(self.api_key)
 
     def parse_incident(self, text: str) -> IncidentData:
