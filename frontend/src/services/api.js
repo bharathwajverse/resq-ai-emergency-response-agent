@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
 });
 
 export const getIncidents = () => api.get('/api/incidents');
@@ -16,6 +16,7 @@ export const getKnowledge = () => api.get('/api/knowledge');
 export const analyzeIncident = (data) => api.post('/api/agent/analyze', data);
 export const planResponse = (data) => api.post('/api/agent/plan', data);
 export const replanResponse = (data) => api.post('/api/agent/replan', data);
+export const replanAgent = replanResponse;
 export const runSearch = (data) => api.post('/api/search/run', data);
 export const inferenceForward = (data) => api.post('/api/inference/forward', data);
 export const inferenceBackward = (data) => api.post('/api/inference/backward', data);
